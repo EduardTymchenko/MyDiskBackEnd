@@ -1,17 +1,16 @@
 package com.tymchenko.mydisk.service;
 
 import com.tymchenko.mydisk.dao.FolderRepository;
+import com.tymchenko.mydisk.domain.DiskUser;
 import com.tymchenko.mydisk.domain.Folder;
 import com.tymchenko.mydisk.exeption.DuplicateNameException;
 import com.tymchenko.mydisk.exeption.FolderNotFoundException;
-import com.tymchenko.mydisk.domain.DiskUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -81,6 +80,11 @@ public class FolderServiceImpl implements FolderService {
         Folder updateFolder = folderRepository.findById(folderId).orElseThrow(() ->
                 new FolderNotFoundException("id = " + folderId));
         Folder checkFolder = null;
+        //rename check to do not change name
+        if (newPath.equals("") && updateFolder.getFolderName().equalsIgnoreCase(newName)) return;
+        //remove check to do not change path
+        if (newName.equals("") && updateFolder.getFolderPath().equals(newPath)) return;
+
         if (!newPath.equals("")) {
             checkFolder = getFolderByFullName(newPath, currentUser);
             if (checkFolder == null) throw new FolderNotFoundException("полному имени " + newPath);
@@ -89,12 +93,15 @@ public class FolderServiceImpl implements FolderService {
             checkFolder = null;
         }
 
-        if (!newName.equals("") && !newPath.equals(""))
+        if (!newName.equals("") && !newPath.equals("")) {
             checkFolder = folderRepository.findByFolderNameAndFolderPathAndBasketAndDiskUser(
                     newName, newPath, false, currentUser);
+        }
+        // rename
         else if (!newName.equals("")) {
             checkFolder = folderRepository.findByFolderNameAndFolderPathAndBasketAndDiskUser(
                     newName, updateFolder.getFolderPath(), false, currentUser);
+
         } else if (!newPath.equals("")) {
             checkFolder = folderRepository.findByFolderNameAndFolderPathAndBasketAndDiskUser(
                     updateFolder.getFolderName(), newPath, false, currentUser);
@@ -137,7 +144,6 @@ public class FolderServiceImpl implements FolderService {
             }
         } else {
             delFolder.setIsShowBasket(false);
-
         }
     }
 
@@ -148,7 +154,7 @@ public class FolderServiceImpl implements FolderService {
         return folderRepository.findAllByFolderNameContainingAndBasketAndDiskUser(searchStr, false, currentUser);
     }
 
-    //ok "/rest/getFiles"
+    // "/rest/getFiles"
     @Override
     @Transactional
     public Folder getFolderByFullName(String fullNameFolder, DiskUser currentUser) {
@@ -164,7 +170,9 @@ public class FolderServiceImpl implements FolderService {
             name = pathArray[pathArray.length - 1];
             path = fullNameFolder.substring(0, fullNameFolder.lastIndexOf(name));
         }
-        return folderRepository.findByFolderNameAndFolderPathAndBasketAndDiskUser(name, path, false, currentUser);
+        Folder folderByFullName = folderRepository.findByFolderNameAndFolderPathAndBasketAndDiskUser(name, path, false, currentUser);
+        if (folderByFullName == null) throw new FolderNotFoundException(fullNameFolder);
+        return folderByFullName;
     }
 
 
@@ -193,31 +201,34 @@ public class FolderServiceImpl implements FolderService {
     public void recoverFolder(Long id) {
         Folder recFolder = folderRepository.findById(id).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Не удалось восстановить папку"));
+        // востанавливаю путь
+        recoverFullPathFolder(recFolder.getFolderPath(), recFolder.getDiskUser());
+
+        // проверяю имя
+        Folder checkFolder = folderRepository.findByFolderNameAndFolderPathAndBasketAndDiskUser(
+                recFolder.getFolderName(),recFolder.getFolderPath(),false,recFolder.getDiskUser());
+        if (checkFolder != null) throw new DuplicateNameException("From recoverFolder()","folder",checkFolder.getFolderName());
         recFolder.setIsShowBasket(false);
         recFolder.setBasket(false);
-        Folder parentFolder;
-        String fullNameParentFolder = recFolder.getFolderPath();
-        String folderName;
-        String folderPath;
+    }
+
+    @Override
+    @Transactional
+    public void recoverFullPathFolder(String fullFolderPath, DiskUser currentUser) {
         while (true) {
-            if (fullNameParentFolder.equals("/")) break;
-            String[] pathArray = fullNameParentFolder.split("/");
-            folderName = pathArray[pathArray.length - 1];
-            folderPath = fullNameParentFolder.substring(0, fullNameParentFolder.lastIndexOf(folderName));
-            parentFolder = folderRepository.findByFolderNameAndFolderPathAndDiskUser(folderName,folderPath,recFolder.getDiskUser());
-            if (parentFolder == null) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Не удалось восстановить папку");
-            parentFolder.setBasket(false);
-            parentFolder.setIsShowBasket(false);
-            fullNameParentFolder = parentFolder.getFolderPath();
+            if (fullFolderPath.equals("/")) break;
+            try {
+                fullFolderPath = getFolderByFullName(fullFolderPath, currentUser).getFolderPath();
+
+            } catch (FolderNotFoundException e) {
+                folderRepository.save(new Folder(fullFolderPath, currentUser));
+            }
         }
     }
 
-
-    // TODO
     private String changeNameFolder(String name, List<Folder> folderList, boolean isBasket) {
         StringBuilder sb = new StringBuilder(name);
-        if (isBasket) sb.append("_bin (2)");
-        else sb.append(" (2)");
+        sb.append(" (2)");
         int index = 2;
         boolean isUseName;
         do {

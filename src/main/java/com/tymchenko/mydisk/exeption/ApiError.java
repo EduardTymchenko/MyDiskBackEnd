@@ -7,6 +7,16 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 @JsonInclude(Include.NON_NULL)
 public class ApiError {
     private HttpStatus status;
+    private String nameStatus;
+
+    public String getNameStatus() {
+        return nameStatus;
+    }
+
+    public void setNameStatus(String nameStatus) {
+        this.nameStatus = nameStatus;
+    }
+
     private String message;
 
     private String debugMessage;
@@ -25,6 +35,10 @@ public class ApiError {
 
     ApiError(HttpStatus status) {
         this.status = status;
+    }
+    public ApiError(HttpStatus status, String nameStatus) {
+        this.status = status;
+        this.nameStatus = nameStatus;
     }
 
     ApiError(HttpStatus status, Throwable ex) {

@@ -20,7 +20,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 
 import io.jsonwebtoken.ExpiredJwtException;
-import org.springframework.web.server.ResponseStatusException;
 
 //Входной фильтр зароса
 @Component

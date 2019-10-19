@@ -7,10 +7,6 @@ import java.util.List;
 public interface FolderService {
 
 
-
-
-
-
     List<Folder> getFoldersBySearch(String searchStr, DiskUser currentUser);
     Folder getFolderByFullName(String fullNameFolder, DiskUser currentUser); //  "/rest/getFiles"
 
@@ -28,5 +24,6 @@ public interface FolderService {
     void clearDisk(DiskUser currentUser);
     void clearBasket(DiskUser currentUser);
     void recoverFolder(Long id);
+    void recoverFullPathFolder(String fullFolderPath, DiskUser currentUser);// for recovery files
 
 }

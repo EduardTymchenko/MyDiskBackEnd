@@ -35,6 +35,18 @@ public class Folder {
         this.folderPath = folderPath;
         this.diskUser = diskUser;
     }
+
+    public Folder(String fullPathFolder, DiskUser diskUser) {
+        if (fullPathFolder.equals("/")){
+            this.folderName = "";
+            this.folderPath = "/";
+        } else {
+            String[] pathArray = fullPathFolder.split("/");
+            this.folderName = pathArray[pathArray.length - 1];
+            this.folderPath = fullPathFolder.substring(0, fullPathFolder.lastIndexOf(folderName));
+        }
+        this.diskUser = diskUser;
+    }
 //    public Folder(String folderName, String folderPath) {
 //        this.folderName = folderName;
 //        this.folderPath = folderPath;

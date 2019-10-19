@@ -1,6 +1,5 @@
 package com.tymchenko.mydisk.controller;
 
-import com.tymchenko.mydisk.exeption.FileNotFoundException;
 import com.tymchenko.mydisk.jwt.JwtRequest;
 import com.tymchenko.mydisk.jwt.JwtResponse;
 import com.tymchenko.mydisk.jwt.JwtTokenUtil;

@@ -1,19 +1,14 @@
 package com.tymchenko.mydisk.controller;
 
-import com.tymchenko.mydisk.domain.FileDisk;
-import com.tymchenko.mydisk.domain.FileDiskForView;
-import com.tymchenko.mydisk.domain.Folder;
-import com.tymchenko.mydisk.domain.FolderForView;
-
-import com.tymchenko.mydisk.domain.DiskUser;
-import com.tymchenko.mydisk.service.UserService;
+import com.tymchenko.mydisk.domain.*;
+import com.tymchenko.mydisk.exeption.ApiError;
 import com.tymchenko.mydisk.service.FileService;
 import com.tymchenko.mydisk.service.FolderService;
+import com.tymchenko.mydisk.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
-import org.springframework.data.repository.query.Param;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -24,13 +19,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @RestController
 public class MainRESTController {
-    //    1Gb = 1073741824 byte
-    private final long fullSizeDisk = 1073741824L / 4;
-    private static String UPLOAD_DIR = System.getProperty("user.home") + "/test";
+    @Value("${disksize}")
+    private long fullSizeDisk ;
 
     @Autowired
     private FileService fileService;
@@ -41,8 +36,6 @@ public class MainRESTController {
     @Autowired
     private UserService userService;
 
-    @Autowired
-    private Environment env;
 
     //****** folder
     @GetMapping("/rest/getAllFolders")
@@ -63,6 +56,11 @@ public class MainRESTController {
                 break;
             case "basket":
                 outList = (listFoldersToView(folderService.getAllIsBasket(currentUser)));
+                //clear base when basket is empty
+                if (outList.size() == 0 && fileService.getAllFilesIsBasket(currentUser).size() == 0) {
+                    folderService.clearBasket(currentUser);
+                    fileService.clearBasket(currentUser);
+                }
                 break;
             case "star":
                 outList = (listFoldersToView(folderService.getAllIsStar(currentUser)));
@@ -77,7 +75,16 @@ public class MainRESTController {
     public ResponseEntity<?> addFolder(@RequestParam("newPath") String pathAddFolder,
                                        @RequestParam("newName") String nameAddFolder) {
         DiskUser currentUser = getRegisteredUser();
-
+        if (pathAddFolder.equals("")) {
+            ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, "Ошибка в параметрах запроса");
+            apiError.setMessage("Параметр папки \"newPath\"  пустой");
+            return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+        }
+        if (nameAddFolder.equals("")) {
+            ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, "Ошибка в параметрах запроса");
+            apiError.setMessage("Параметр имени папки \"newName\"  пустой");
+            return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+        }
         folderService.addFolder(nameAddFolder, pathAddFolder, currentUser);
         return new ResponseEntity<>(HttpStatus.OK);
     }
@@ -94,10 +101,11 @@ public class MainRESTController {
     public ResponseEntity<?> updateFolder(@RequestParam("id") long currentFolderId,
                                           @RequestParam("newPath") String newPath,
                                           @RequestParam("newName") String newName) {
-
-
-        if (newName.equals("") && newPath.equals(""))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "пустые");
+        if (newName.equals("") && newPath.equals("")) {
+            ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, "Ошибка в параметрах запроса");
+            apiError.setMessage("Параметры \"newPath\" и \"newName\" пустые");
+            return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+        }
         DiskUser currentUser = getRegisteredUser();
         folderService.updateFolder(currentFolderId, newName, newPath, currentUser);
         return new ResponseEntity<>(HttpStatus.OK);
@@ -113,15 +121,13 @@ public class MainRESTController {
         switch (typeSideMenu) {
             case "folders":
                 Folder folder = folderService.getFolderByFullName(fullFolderPath, currentUser);
-                //todo
-//                if (folder == null) throw  new ResponseStatusException(HttpStatus.BAD_REQUEST,"Ошибка запроса в параметре 'path'");//TODO ok
                 outList = listFilesToView(fileService.getAllFilesInFolder(folder));
                 break;
             case "basket":
-                outList = (listFilesToView(fileService.getAllFilesIsBasket(currentUser)));
+                outList = listFilesToView(fileService.getAllFilesIsBasket(currentUser));
                 break;
             case "star":
-                outList = (listFilesToView(fileService.getAllFilesIsStar(currentUser)));
+                outList = listFilesToView(fileService.getAllFilesIsStar(currentUser));
                 break;
             default:
                 outList = new ArrayList<>();
@@ -139,26 +145,12 @@ public class MainRESTController {
     @PostMapping("/rest/uploadMultiFiles")
     public ResponseEntity<?> uploadFileMulti(@RequestParam("myfiles") MultipartFile[] files,
                                              @RequestParam("folderPath") String fullNameFolder) throws Exception {
-        System.out.println(files[0].getOriginalFilename());
-//        System.out.println(files[1].getOriginalFilename());
-        System.out.println(files[0].getContentType());
-        System.out.println(files[0].getSize());
-        System.out.println(files[0].getResource());
-        System.out.println(fullNameFolder);
-//        Проверка размера файла
-
         DiskUser currentUser = getRegisteredUser();
         Folder uploadFolder = folderService.getFolderByFullName(fullNameFolder, currentUser);
-//        todo общий контроллер исключений довим от томката
-        String maxSizeFile = env.getProperty("spring.servlet.multipart.max-file-size");
-        String maxSizeFileList = env.getProperty("spring.servlet.multipart.max-request-size");
-
         for (MultipartFile file : files) {
             long sizeFile = file.getSize();
-
             String nameFile = file.getOriginalFilename();
             String mediaType = file.getContentType();
-            //TODO try ловим исключение от базы данных jdbc.exceptions.PacketTooBigException: Packet for query is too large (382 942 574 > 4 194 304)
             byte[] bodyFile = file.getBytes();
             fileService.addFile(new FileDisk(nameFile, mediaType, sizeFile, bodyFile, uploadFolder));
         }
@@ -169,10 +161,11 @@ public class MainRESTController {
     @GetMapping("/rest/downloadFile/{fileId}")
     public ResponseEntity<Resource> downloadFile(@PathVariable long fileId) {
         FileDisk dbFile = fileService.getFileId(fileId);
+        String fileName = dbFile.getFileName();
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(dbFile.getTypeFile()))
                 .contentLength(dbFile.getSizeFile())
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + dbFile.getFileName() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                 .body(new ByteArrayResource(dbFile.getBodyFile()));
     }
 
@@ -181,14 +174,12 @@ public class MainRESTController {
     public ResponseEntity<?> updateFile(@RequestParam("id") long idFile,
                                         @RequestParam("newName") String newName,
                                         @RequestParam("newPath") String newPath) {
-
-//        TODO придумать ошибку
-        if (newName.equals("") && newPath.equals("")) return new ResponseEntity<>(HttpStatus.OK);
+        if (newName.equals("") && newPath.equals(""))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Не могут быть пустыми параметры \"newName\" и \"newPath\"");
         Folder newFolder = null;
         if (!newPath.equals("")) {
             DiskUser currentUser = getRegisteredUser();
             newFolder = folderService.getFolderByFullName(newPath, currentUser);
-//            TODO folder null
         }
 
         fileService.updateFile(idFile, newName, newFolder);
@@ -208,7 +199,7 @@ public class MainRESTController {
                 fileService.changeStatusStar(id);
                 break;
             default:
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "В запросе неверно указан параметр \"typeMenu\"");
         }
         return new ResponseEntity<>(HttpStatus.OK);
     }
@@ -270,11 +261,19 @@ public class MainRESTController {
                                      @RequestParam("id") Long id) {
         if (typeObject.equals("folder")) {
             folderService.recoverFolder(id);
+
         } else if (typeObject.equals("file")) {
-            Folder recForderForFile = fileService.recoverFile(id).getFolder();
-            folderService.recoverFolder(recForderForFile.getId());
+            FileDisk recFile = fileService.recoverFile(id);
+            //восстановить путь к файлу
+            String pathForFile;
+            if (recFile.getFolder().getFolderName().equals("")) pathForFile = "/";
+            else pathForFile = recFile.getFolder().getFolderPath() + recFile.getFolder().getFolderName() + "/";
+            folderService.recoverFullPathFolder(pathForFile, recFile.getFolder().getDiskUser());
+            Folder newRecFolder = folderService.getFolderByFullName(pathForFile, recFile.getFolder().getDiskUser());
+            fileService.updateFile(recFile.getId(),"",newRecFolder);
+
         } else {
-            //todo exeption
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "В запросе неверно указан параметр \"typeObject\"");
         }
         return new ResponseEntity<>(HttpStatus.OK);
     }
