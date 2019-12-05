@@ -28,25 +28,25 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Folder> getAllActiveFolders(DiskUser currentUser) {
         return folderRepository.findAllByBasketAndDiskUser(false, currentUser);
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Folder> getAllByPath(String path, DiskUser currentUser) {
         return folderRepository.findAllByFolderPathAndBasketAndDiskUser(path, false, currentUser);
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Folder> getAllIsBasket(DiskUser currentUser) {
         return folderRepository.findAllByBasketAndIsShowBasketAndDiskUser(true, true, currentUser);
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Folder> getAllIsStar(DiskUser currentUser) {
         return folderRepository.findAllByBasketAndStarAndDiskUser(false, true, currentUser);
     }
@@ -67,8 +67,8 @@ public class FolderServiceImpl implements FolderService {
                 nameClear = nameFolder.substring(0, start);
             } else nameClear = nameFolder;
 
-            List<Folder> listWithName = folderRepository.findAllByFolderNameStartsWithAndFolderPathAndBasketAndDiskUser(
-                    nameClear + " ", pathFolder, false, currentUser);
+            List<Folder> listWithName = folderRepository.findAllIncludeFolderName(nameClear + " ",
+                    pathFolder, false, currentUser);
             String newName = changeNameFolder(nameClear, listWithName, false);
             folderRepository.save(new Folder(newName, pathFolder, currentUser));
         }
@@ -156,7 +156,7 @@ public class FolderServiceImpl implements FolderService {
 
     // "/rest/getFiles"
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public Folder getFolderByFullName(String fullNameFolder, DiskUser currentUser) {
         if (fullNameFolder.equals(""))
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Полное имя папки не может быть пустым");

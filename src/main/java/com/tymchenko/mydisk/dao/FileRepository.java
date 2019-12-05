@@ -4,6 +4,7 @@ import com.tymchenko.mydisk.domain.FileDisk;
 import com.tymchenko.mydisk.domain.Folder;
 import com.tymchenko.mydisk.domain.DiskUser;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
@@ -37,6 +38,36 @@ public interface FileRepository extends JpaRepository<FileDisk, Long> {
     // get file by name for check
     FileDisk findByFileNameAndFolderAndBasket(String fileName, Folder folder, boolean isBasket);
 
+    // addFile for check equal name  file
+    @Query("SELECT fd.fileName from FileDisk as fd join fd.folder as f " +
+            "where f = ?3 and fd.basket = ?4 and fd.fileName like concat(?1,'%',?2)")
+    List<String> findAllIncludeFileName(String fileName, String expansion, Folder folder, boolean isBasket);
 
-    List<FileDisk> findAllByFileNameStartingWithAndFileNameEndsWithAndFolderAndBasket(String startName,String endName,Folder folder,boolean isBasket);
+    // check to exist for update file
+    boolean existsByIdAndBasket(Long id, boolean isBasket);
+    // get update file name
+    @Query("SELECT fd.fileName from FileDisk as fd where fd.id = ?1")
+    String  getUpdateFileName(Long id);
+
+    // get folder update file
+    @Query("SELECT fd.folder from FileDisk as fd where fd.id = ?1")
+    Folder getFolderUpdateFile(Long id);
+
+    // check equals file name in folder
+    boolean existsFileDiskByFileNameAndFolderAndBasket(String fileName,Folder folder, boolean isBasket);
+
+    // update file name
+    @Modifying
+    @Query("update FileDisk fd set fd.fileName = ?2 where fd.id = ?1")
+    int  updateFileName(Long id, String fileName);
+
+    // update file folder
+    @Modifying
+    @Query("update FileDisk fd set fd.folder = ?2 where fd.id = ?1")
+    int  updateFileFolder(Long id, Folder newFolder);
+
+    // update file name and folder
+    @Modifying
+    @Query("update FileDisk fd set fd.fileName = ?2, fd.folder = ?3  where fd.id = ?1")
+    int  updateFileNameAndFolder(Long id, String fileName, Folder newFolder);
 }

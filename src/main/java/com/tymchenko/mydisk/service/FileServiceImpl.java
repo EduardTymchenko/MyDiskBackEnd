@@ -20,19 +20,19 @@ public class FileServiceImpl implements FileService {
     private FileRepository fileRepository;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<FileDisk> getAllFilesInFolder(Folder folder) {
         return fileRepository.findAllByFolderAndBasket(folder, false);
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<FileDisk> getAllFilesIsStar(DiskUser currentUser) {
         return fileRepository.getAllFilesIsStarForUser(currentUser);
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<FileDisk> getAllFilesIsBasket(DiskUser currentUser) {
         return fileRepository.getAllFilesIsBasketForUser(currentUser);
     }
@@ -53,28 +53,50 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void updateFile(long id, String newName, Folder newFolder) {
-        FileDisk updateFile = fileRepository.findById(id).orElseThrow(() ->
-                new FileNotFoundException("id = " + id));
+        if (!fileRepository.existsByIdAndBasket(id,false)) throw  new FileNotFoundException("id = " + id);
+
+        String nameFileUpdate = fileRepository.getUpdateFileName(id);
+        Folder folderUpdateFile = fileRepository.getFolderUpdateFile(id);
+        boolean duplicateFile = false;
+        String duplicateName = "";
+
         //check rename
-        if (newFolder == null && updateFile.getFileName().equalsIgnoreCase(newName)) return;
-        //check remove
-        if (newName.equals("") && updateFile.getFolder().equals(newFolder)) return;
-        FileDisk checkFile = null;
+        if (newFolder == null && nameFileUpdate.equalsIgnoreCase(newName)) return;
+        //check move
+        if (newName.equals("") && folderUpdateFile.equals(newFolder)) return;
+
         //rename
-        if (!newName.equals("")) {
-            checkFile = fileRepository.findByFileNameAndFolderAndBasket(newName, updateFile.getFolder(), false);
-            if (checkFile == null) updateFile.setFileName(newName);
+        if (!newName.equals("") && newFolder == null) {
+            if (fileRepository.existsFileDiskByFileNameAndFolderAndBasket(newName,folderUpdateFile,false)){
+                duplicateFile = true;
+                duplicateName = newName;
+            } else {
+                fileRepository.updateFileName(id, newName);
+            }
         }
-        //remove
-        if (newFolder != null){
-            checkFile = fileRepository.findByFileNameAndFolderAndBasket(updateFile.getFileName(), newFolder, false);
-            if (checkFile == null) updateFile.setFolder(newFolder);
+        //move
+        if (newFolder != null && newName.equals("")){
+            if (fileRepository.existsFileDiskByFileNameAndFolderAndBasket(nameFileUpdate, newFolder,false)){
+                duplicateFile = true;
+                duplicateName = nameFileUpdate;
+            } else {
+                fileRepository.updateFileFolder(id, newFolder);
+            }
+        }
+        //move and rename
+        if (newFolder != null && !newName.equals("")){
+            if (fileRepository.existsFileDiskByFileNameAndFolderAndBasket(newName, newFolder,false)){
+                duplicateFile = true;
+                duplicateName = nameFileUpdate;
+            } else {
+                fileRepository.updateFileNameAndFolder(id, newName, newFolder);
+            }
         }
 
-        if (checkFile != null) {
+        if (duplicateFile) {
             String typeObject = "file";
-            String errMessage = "A " + typeObject + " with the name " + checkFile.getFileName() + " already exists!";
-            throw new DuplicateNameException(errMessage, typeObject, checkFile.getFileName());
+            String errMessage = "A " + typeObject + " with the name " + duplicateName + " already exists!";
+            throw new DuplicateNameException(errMessage, typeObject, duplicateName);
         }
     }
 
@@ -93,8 +115,7 @@ public class FileServiceImpl implements FileService {
         if (checkFile != null) {
             String checkExpansion = getFileExpansion(checkFile.getFileName());
             String checkFileName = checkFile.getFileName().split(checkExpansion)[0];
-            List<FileDisk> listFiles = fileRepository.findAllByFileNameStartingWithAndFileNameEndsWithAndFolderAndBasket(
-                    checkFileName, checkExpansion, checkFile.getFolder(), false);
+            List<String> listFiles = fileRepository.findAllIncludeFileName(checkFileName, checkExpansion, checkFile.getFolder(), false);
             String newName = changeNameFile(fileDisk.getFileName(), listFiles);
             fileDisk.setFileName(newName);
         }
@@ -103,7 +124,7 @@ public class FileServiceImpl implements FileService {
 
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public long getCurrentSize(DiskUser currentUser) {
         Long currentSize = fileRepository.sumSizeFiles(currentUser);
         if (currentSize == null) return 0;
@@ -111,7 +132,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public long getSizeFolderByFullPath(String fullPathFolder, DiskUser currentUser) {
         Long folderSize;
         String name;
@@ -145,7 +166,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<FileDisk> getFilesBySearch(String searchStr, DiskUser currentUser) {
         return fileRepository.getFilesBySearch(searchStr, currentUser);
     }
@@ -158,11 +179,11 @@ public class FileServiceImpl implements FileService {
         return fileDisk;
     }
 
-    private String changeNameFile(String fileNameFull, List<FileDisk> listFiles) {
+    private String changeNameFile(String fileNameFull, List<String> listFilesName) {
         String fileName = fileNameFull;
         String fileExpansion = getFileExpansion(fileNameFull);
 
-        if (fileExpansion != null) {
+        if (!fileExpansion.equals("")) {
             fileName = fileNameFull.split(fileExpansion)[0];
         }
         int indexInsert = fileName.length() + 2;
@@ -172,8 +193,8 @@ public class FileServiceImpl implements FileService {
         boolean isUseName = false;
         while (true) {
             sb.append(newFileName).insert(indexInsert, n);
-            for (FileDisk fileDisk : listFiles) {
-                if (sb.toString().equals(fileDisk.getFileName())) {
+            for (String fileNameIteam : listFilesName) {
+                if (sb.toString().equals(fileNameIteam)) {
                     isUseName = true;
                     break;
                 }
@@ -192,7 +213,7 @@ public class FileServiceImpl implements FileService {
         if (indexExpansion != -1) {
             return fullNameFile.substring(indexExpansion);
         }
-        return null;
+        return "";
     }
 
 
